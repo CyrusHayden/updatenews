@@ -1,0 +1,22 @@
+name: diag-images
+on:
+  push:
+    paths: [".github/workflows/diag.yml"]
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          UA="UpdateNewsBot/1.0 (https://github.com/CyrusHayden/updatenews) python-requests/2"
+          for t in HSBC Barclays Donald_Trump; do
+            c=$(curl -s -o /tmp/o -w "%{http_code}" -A "$UA" "https://en.wikipedia.org/w/api.php?action=query&format=json&prop=pageimages&piprop=thumbnail&pithumbsize=800&redirects=1&titles=$t")
+            echo "::notice::wiki-ua $t $c $(head -c 250 /tmp/o | tr '\n' ' ')"
+          done
+          c=$(curl -s -o /tmp/o -w "%{http_code}" "https://en.wikipedia.org/w/api.php?action=query&format=json&titles=HSBC")
+          echo "::notice::wiki-noua $c"
+          c=$(curl -s -o /tmp/o -w "%{http_code}" -A "Mozilla/5.0 (compatible; NewsDigestBot/1.0; +https://github.com)" "https://en.wikipedia.org/w/api.php?action=query&format=json&titles=HSBC")
+          echo "::notice::wiki-oldua $c"
+          c=$(curl -s -o /tmp/o -w "%{http_code}" -A "$UA" "https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/HSBC_logo_%282018%29.svg/800px-HSBC_logo_%282018%29.svg.png")
+          echo "::notice::upload $c $(wc -c </tmp/o)"
+          c=$(curl -s -o /tmp/o -w "%{http_code}" "https://api.coingecko.com/api/v3/search?query=bitcoin")
+          echo "::notice::coingecko $c"
