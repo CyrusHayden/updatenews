@@ -308,9 +308,13 @@ def main():
         tag = f"channel #{n}"   # log KHÔNG ghi tên channel (repo public)
         last = state["last_ids"].get(ch, 0)
         try:
-            if last == 0:   # lần đầu: chỉ đánh dấu mốc, không đăng tin cũ
-                state["last_ids"][ch] = latest_id(ch)
-                log(f"{tag}: lần đầu, chỉ đặt mốc (không đăng tin cũ)")
+            if last == 0:   # lần đầu: chỉ lấy N tin mới nhất để đăng luôn, không đăng tràn tin cũ
+                n_first = int(cfg.get("first_run_posts", 3))
+                top = latest_id(ch)
+                posts = fetch_channel(ch, max(top - 50, 1) - 1)[-n_first:] if n_first > 0 else []
+                state["last_ids"][ch] = top
+                log(f"{tag}: lần đầu, lấy {len(posts)} tin mới nhất")
+                new_posts += posts
                 continue
             posts = fetch_channel(ch, last)
             log(f"{tag}: {len(posts)} tin mới")
@@ -368,7 +372,7 @@ def main():
     for ch in {p["channel"] for p in new_posts}:
         ch_failed = [p["id"] for p in failed if p["channel"] == ch]
         ch_all = [p["id"] for p in new_posts if p["channel"] == ch]
-        state["last_ids"][ch] = (min(ch_failed) - 1) if ch_failed else max(ch_all)
+        state["last_ids"][ch] = (min(ch_failed) - 1) if ch_failed else max(ch_all + [state["last_ids"].get(ch, 0)])
     save_state(state)
     log(f"Đã đăng {posted} bài.")
 
