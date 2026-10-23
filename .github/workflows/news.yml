@@ -1,9 +1,7 @@
 name: News Bot
 
 on:
-  schedule:
-    - cron: "*/15 * * * *"     # mỗi 15 phút (GitHub có thể chạy trễ vài phút)
-  workflow_dispatch:            # cho phép bấm "Run workflow" để chạy tay
+  workflow_dispatch:            # chạy mỗi 15 phút do cron-job.org gọi API, hoặc bấm "Run workflow" để chạy tay
 
 permissions:
   contents: write               # để lưu state.enc (nhớ đã lấy tới tin nào)
