@@ -1,0 +1,40 @@
+name: News Bot
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"     # mỗi 15 phút (GitHub có thể chạy trễ vài phút)
+  workflow_dispatch:            # cho phép bấm "Run workflow" để chạy tay
+
+permissions:
+  contents: write               # để lưu state.enc (nhớ đã lấy tới tin nào)
+
+concurrency:
+  group: news-bot
+  cancel-in-progress: false     # không chạy chồng 2 lượt
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Run bot
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          STATE_KEY: ${{ secrets.STATE_KEY }}
+          SOURCE_CHANNELS: ${{ secrets.SOURCE_CHANNELS }}
+          TARGET_CHAT: ${{ secrets.TARGET_CHAT }}
+        run: python bot.py
+      - name: Save state
+        if: always()
+        run: |
+          git config user.name "news-bot"
+          git config user.email "news-bot@users.noreply.github.com"
+          git add state.enc
+          git diff --cached --quiet || (git commit -m "update [skip ci]" && git pull --rebase && git push)

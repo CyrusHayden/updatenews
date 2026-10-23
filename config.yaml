@@ -1,0 +1,43 @@
+# ============================================================
+#  CẤU HÌNH BOT TỔNG HỢP TIN — chỉ cần sửa file này, không đụng code
+#  Lưu ý: giữ đúng thụt lề (2 dấu cách) và dấu "-" đầu mỗi dòng danh sách
+# ============================================================
+
+# 1) + 2) CHANNEL NGUỒN và CHANNEL ĐÍCH: KHÔNG ghi ở đây (repo public ai cũng xem được).
+#    Cài trong GitHub Secrets:
+#      SOURCE_CHANNELS = danh sách channel nguồn, mỗi dòng 1 tên (vd: TenChannel)
+#      TARGET_CHAT     = @channel_cua_ban  hoặc  -100xxxxxxxxxx
+#    Xem HUONG_DAN.md, Bước 5.
+
+# 3) LỌC TỪ KHÓA (không phân biệt hoa thường)
+#    include: tin phải chứa ÍT NHẤT 1 từ này. Để trống [] = lấy hết.
+#    exclude: tin chứa BẤT KỲ từ nào ở đây sẽ bị bỏ (quảng cáo, giveaway...)
+keywords:
+  include: []
+  exclude:
+    - giveaway
+    - airdrop
+    - promo code
+    - sponsored
+
+# 4) HEADER / FOOTER (để "" nếu không dùng). Có thể nhiều dòng, dùng \n để xuống dòng.
+header: ""
+footer: ""
+
+# 5) ẢNH MẶC ĐỊNH khi tin chỉ có chữ và không tìm được ảnh trên Wikipedia/CoinGecko.
+#    Ghi tên file ảnh đặt trong repo (vd: default.jpg) hoặc 1 link ảnh. Để "" = đăng chữ không ảnh.
+default_image: ""
+
+# 6) AI (Gemini). Tên model lấy đúng như trong Google AI Studio.
+ai:
+  primary_model: "gemini-3.5-flash-lite"
+  backup_model: "gemini-3.8-flash"
+  max_chars_per_call: 60000      # gom tin tối đa ~60k ký tự / lần gọi (~20k token) để không vượt TPM
+  seconds_between_calls: 5       # nghỉ giữa các lần gọi để không vượt RPM
+
+# 7) CHỐNG TRÙNG
+dedupe_hours: 24                 # so với tin đã đăng trong 24h gần nhất
+
+# 8) KHÁC
+max_posts_per_run: 30            # an toàn: tối đa số bài đăng mỗi lượt
+seconds_between_posts: 3
