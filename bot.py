@@ -38,6 +38,12 @@ def log(msg):
     print(f"[{datetime.now(timezone.utc):%H:%M:%S}] {msg}", flush=True)
 
 
+def fail(msg):
+    """Báo lỗi nổi bật trên trang Actions (dòng đỏ ở phần Annotations) rồi dừng."""
+    print(f"::error::{msg}", flush=True)
+    sys.exit(1)
+
+
 # ---------------------------------------------------------------- config/state
 def load_config():
     cfg = yaml.safe_load((ROOT / "config.yaml").read_text(encoding="utf-8"))
@@ -57,7 +63,11 @@ def _fernet():
 
 def load_state():
     if STATE_FILE.exists() and STATE_FILE.stat().st_size > 0:
-        raw = _fernet().decrypt(STATE_FILE.read_bytes())
+        try:
+            raw = _fernet().decrypt(STATE_FILE.read_bytes())
+        except Exception:
+            print("::warning::STATE_KEY không khớp với file state.enc -> chạy lại từ đầu (đặt mốc mới).")
+            return {"last_ids": {}, "recent": []}
         return json.loads(raw.decode("utf-8"))
     return {"last_ids": {}, "recent": []}
 
@@ -284,7 +294,7 @@ def publish(caption, images, cfg):
 def main():
     cfg = load_config()
     if not cfg["sources"] or not cfg.get("target_chat"):
-        sys.exit("Thiếu SOURCE_CHANNELS hoặc TARGET_CHAT (cài trong GitHub Secrets).")
+        fail("Thiếu Secret SOURCE_CHANNELS hoặc TARGET_CHAT (Settings > Secrets and variables > Actions).")
     state = load_state()
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(hours=cfg.get("dedupe_hours", 24))
@@ -306,7 +316,7 @@ def main():
             log(f"{tag}: {len(posts)} tin mới")
             new_posts += posts
         except Exception as e:
-            log(f"{tag}: không đọc được ({type(e).__name__})")
+            print(f"::warning::{tag}: không đọc được ({type(e).__name__}) - kiểm tra tên channel / t.me/s có xem được không", flush=True)
 
     # 2. lọc từ khóa + trùng y hệt
     cand = []
@@ -369,5 +379,15 @@ if __name__ == "__main__":
     if DRY_RUN:
         missing = [m for m in missing if m != "TELEGRAM_BOT_TOKEN"]
     if missing:
-        sys.exit("Thiếu Secrets: " + ", ".join(missing))
-    main()
+        fail("Thiếu Secret: " + ", ".join(missing) + " (Settings > Secrets and variables > Actions).")
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        msg = f"{type(e).__name__}: {e}"
+        if TARGET_CHAT:
+            msg = msg.replace(TARGET_CHAT, "***")
+        fail("Bot lỗi: " + msg[:300])
