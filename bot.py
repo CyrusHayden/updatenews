@@ -24,7 +24,7 @@ from cryptography.fernet import Fernet
 ROOT = Path(__file__).parent
 STATE_FILE = ROOT / "state.enc"   # file trạng thái đã MÃ HÓA
 UA = {"User-Agent": "Mozilla/5.0 (compatible; NewsDigestBot/1.0; +https://github.com)"}
-WIKI_UA = {"User-Agent": "TelegramNewsDigestBot/1.0 (personal non-commercial bot)"}
+WIKI_UA = {"User-Agent": "UpdateNewsBot/1.0 (https://github.com/CyrusHayden/updatenews) python-requests/2"}
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
@@ -194,16 +194,20 @@ def chunks(posts, max_chars):
 
 # ---------------------------------------------------------------- 4. ảnh
 def wiki_image(query):
-    try:
-        r = requests.get("https://en.wikipedia.org/w/api.php", headers=WIKI_UA, timeout=20, params={
-            "action": "query", "format": "json", "generator": "search", "gsrsearch": query,
-            "gsrlimit": 1, "prop": "pageimages", "piprop": "thumbnail", "pithumbsize": 1000})
-        pages = r.json().get("query", {}).get("pages", {})
-        for p in pages.values():
-            if p.get("thumbnail"):
-                return p["thumbnail"]["source"]
-    except Exception:
-        pass
+    """Ảnh đại diện của bài Wikipedia: thử đúng tên bài trước, không có thì tìm kiếm (3 kết quả đầu)."""
+    base = {"action": "query", "format": "json", "prop": "pageimages",
+            "piprop": "thumbnail", "pithumbsize": 1000, "redirects": 1}
+    tries = [dict(base, titles=query),
+             dict(base, generator="search", gsrsearch=query, gsrlimit=3)]
+    for params in tries:
+        try:
+            r = requests.get("https://en.wikipedia.org/w/api.php", headers=WIKI_UA, timeout=20, params=params)
+            pages = sorted(r.json().get("query", {}).get("pages", {}).values(), key=lambda p: p.get("index", 0))
+            for p in pages:
+                if p.get("thumbnail"):
+                    return p["thumbnail"]["source"]
+        except Exception:
+            pass
     return None
 
 
@@ -218,16 +222,25 @@ def coingecko_image(coin):
     return None
 
 
-def find_image(res, cfg):
+def find_images(res, cfg, want=2):
+    """Tìm tối đa `want` ảnh KHÁC NHAU cho tin chỉ có chữ: logo coin (CoinGecko) + ảnh Wikipedia."""
+    urls = []
     if res.get("coin"):
         u = coingecko_image(res["coin"])
         if u:
-            return u
-    if res.get("image_query"):
-        u = wiki_image(res["image_query"])
-        if u:
-            return u
-    return cfg.get("default_image") or None
+            urls.append(u)
+    queries = res.get("image_queries") or ([res["image_query"]] if res.get("image_query") else [])
+    for q in queries:
+        if len(urls) >= want:
+            break
+        u = wiki_image(str(q))
+        if u and u not in urls:
+            urls.append(u)
+    images = [b for b in (load_image_bytes(u) for u in urls) if b][:want]
+    if not images:
+        b = load_image_bytes(cfg.get("default_image") or "")
+        images = [b] if b else []
+    return images
 
 
 def load_image_bytes(src):
@@ -269,6 +282,13 @@ def publish(caption, images, cfg):
     cap = to_html(caption)
     if DRY_RUN:
         print("\n----- DRY RUN -----\n" + caption + f"\n[ảnh: {len(images)}]\n")
+        return
+    if len(cap) > 1000 and len(images) > 1:   # caption quá dài: gửi album ảnh trước, chữ sau
+        tg("sendMediaGroup", {"chat_id": chat, "media": json.dumps(
+            [{"type": "photo", "media": f"attach://p{i}"} for i in range(len(images))])},
+           {f"p{i}": (f"p{i}.jpg", b) for i, b in enumerate(images)})
+        tg("sendMessage", {"chat_id": chat, "text": cap, "parse_mode": "HTML",
+                           "disable_web_page_preview": "true"})
         return
     if len(cap) > 1000 or not images:          # caption ảnh tối đa 1024 ký tự
         if images:
@@ -357,8 +377,7 @@ def main():
             break
         imgs = [b for b in (load_image_bytes(u) for u in p["images"]) if b]
         if not imgs:
-            b = load_image_bytes(find_image(res, cfg))
-            imgs = [b] if b else []
+            imgs = find_images(res, cfg, int(cfg.get("auto_images", 2)))
         try:
             publish(build_caption(res["post"], cfg), imgs, cfg)
             posted += 1

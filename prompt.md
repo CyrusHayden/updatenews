@@ -22,9 +22,12 @@ For EACH new post, decide and rewrite it following these rules.
 - Never mention the source.
 - End with an empty line and exactly 2 relevant hashtags, e.g. `#BTC #ETF`, `#crypto #UAE`, `#diesel #Trump`.
 
-## Image keyword
-- image_query: the single best subject to find a picture of on Wikipedia when the post has no image:
-  a company, person, country, coin or commodity name (e.g. "HSBC", "Donald Trump", "Elon Musk", "Bitcoin", "Diesel fuel").
+## Image keywords
+- image_queries: a list of 2–4 DIFFERENT subjects to search on Wikipedia for pictures, most important first.
+  Use concrete proper names only: companies, people, countries, cities, coins, commodities, institutions
+  (e.g. ["HSBC", "Barclays", "Standard Chartered"], ["Donald Trump", "Iran"], ["Bitcoin", "BlackRock"]).
+  NEVER use abstract topics like "AI", "economy", "job cuts", "market crash". If the news names only one entity,
+  add a second related concrete one (its country, CEO, headquarters city, or the product).
 - coin: if the main subject is a cryptocurrency/token, its name (e.g. "Bitcoin", "RedCoin"), else "".
 
 ## Examples
@@ -53,5 +56,5 @@ Rewritten:
 
 ## Output format
 Return ONLY a JSON array, one object per input post, in this shape:
-[{"id": "<same id as input>", "skip": false, "duplicate": false, "summary": "<one short English sentence describing the event>", "post": "<rewritten post>", "image_query": "...", "coin": "..."}]
+[{"id": "<same id as input>", "skip": false, "duplicate": false, "summary": "<one short English sentence describing the event>", "post": "<rewritten post>", "image_queries": ["...", "..."], "coin": "..."}]
 For skipped/duplicate posts, "post" can be "".
