@@ -1,0 +1,31 @@
+name: Signal Bot
+
+on:
+  workflow_dispatch:            # cron-job.org gọi API mỗi 1-2 phút, hoặc bấm "Run workflow" để chạy tay
+
+permissions:
+  contents: read                # bot này không cần lưu file gì
+
+concurrency:
+  group: signal-bot
+  cancel-in-progress: false     # không chạy chồng 2 lượt
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install requests pyyaml
+      - name: Run signal bot
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TARGET_CHAT: ${{ secrets.TARGET_CHAT }}
+          AUTO_POST_ASSISTANT_ID: ${{ secrets.AUTO_POST_ASSISTANT_ID }}
+          INBOX_LINK: ${{ secrets.INBOX_LINK }}
+        run: python signal_bot.py
