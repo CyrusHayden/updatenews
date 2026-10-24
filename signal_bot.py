@@ -1,5 +1,5 @@
 """
-Bot đăng lại SIGNAL / NHẬN ĐỊNH.
+Bot đăng lại SIGNAL / NHẬN ĐỊNH / NEWS.
 Bạn forward (hoặc gửi) tin vào kênh/nhóm "Auto Post Assistant" -> bot nhờ Gemini đọc chữ + ảnh,
 viết lại theo mẫu rồi:
   - Gemini chắc chắn  -> đăng thẳng lên channel chính (TARGET_CHAT)
@@ -19,6 +19,8 @@ from pathlib import Path
 
 import requests
 import yaml
+
+from bot import find_images      # tự tìm ảnh cho tin news chỉ có chữ (dùng chung với bot tin tức)
 
 ROOT = Path(__file__).parent
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -52,6 +54,7 @@ def load_config():
     sc.setdefault("cta_entry", "🎁 Looking for better entries with clear TP & SL levels? DM {name}")
     sc.setdefault("cta_signal", "👑 DM {name} now to get more free VIP signals access!")
     sc["prompt"] = (ROOT / "signal_prompt.md").read_text(encoding="utf-8")
+    sc["news_cfg"] = cfg            # header/footer/default_image/auto_images của bot tin tức
     return sc
 
 
@@ -194,7 +197,19 @@ def inbox_name(link):
     return m.group(1) if m else link.lstrip("@")
 
 
+def post_type(res):
+    t = str(res.get("type") or "").lower()
+    if t in ("signal", "analysis", "news"):
+        return t
+    return "signal" if res.get("is_signal") else "analysis"
+
+
 def build_post(res, cfg):
+    body = md_to_html(clean_body(res.get("body") or ""))
+    if post_type(res) == "news":
+        nc = cfg.get("news_cfg") or {}
+        parts = [md_to_html(nc.get("header") or ""), body, md_to_html(nc.get("footer") or "")]
+        return "\n\n".join(x for x in parts if x)
     tickers = []
     for t in res.get("tickers") or []:
         t = norm_ticker(t)
@@ -202,9 +217,8 @@ def build_post(res, cfg):
             tickers.append(t)
     title = ("[" + " ".join("$" + t for t in tickers[:3]) + "] UPDATE") if tickers else "MARKET UPDATE"
     name = f'<b><a href="{html.escape(INBOX_LINK)}">{html.escape(inbox_name(INBOX_LINK))}</a></b>'
-    cta = cfg["cta_signal"] if res.get("is_signal") else cfg["cta_entry"]
+    cta = cfg["cta_signal"] if post_type(res) == "signal" else cfg["cta_entry"]
     cta_html = html.escape(cta, quote=False).replace("{name}", name)
-    body = md_to_html(clean_body(res.get("body") or ""))
     return f"<b>{html.escape(title)}</b>\n\n{body}\n\n<i>{cta_html}</i>"
 
 
@@ -212,8 +226,15 @@ def visible_len(h):
     return len(html.unescape(re.sub(r"<[^>]+>", "", h)))
 
 
+def _photo(base, photo, **extra):
+    """photo = file_id (ảnh có sẵn trên Telegram) hoặc bytes (ảnh tự tìm)."""
+    if isinstance(photo, bytes):
+        return tg("sendPhoto", dict(base, **extra), {"photo": ("img.jpg", photo)})
+    return tg("sendPhoto", dict(base, photo=photo, **extra))
+
+
 def send_post(chat, caption, photos):
-    """Đăng 1 bài, trả về list message_id đã tạo."""
+    """Đăng 1 bài, trả về list message_id đã tạo. photos: list file_id hoặc bytes."""
     if DRY_RUN:
         print(f"\n----- DRY RUN -> {'MAIN' if chat == TARGET_CHAT else 'ASSISTANT'} -----\n{caption}\n[ảnh: {len(photos)}]\n")
         return [0]
@@ -224,13 +245,18 @@ def send_post(chat, caption, photos):
         return [tg("sendMessage", text_msg)["message_id"]]
     if len(photos) == 1:
         if long_cap:
-            ids = [tg("sendPhoto", dict(base, photo=photos[0]))["message_id"]]
+            ids = [_photo(base, photos[0])["message_id"]]
             return ids + [tg("sendMessage", text_msg)["message_id"]]
-        return [tg("sendPhoto", dict(base, photo=photos[0], caption=caption, parse_mode="HTML"))["message_id"]]
-    media = [{"type": "photo", "media": f} for f in photos[:10]]
+        return [_photo(base, photos[0], caption=caption, parse_mode="HTML")["message_id"]]
+    media, files = [], {}
+    for i, f in enumerate(photos[:10]):
+        if isinstance(f, bytes):
+            files[f"p{i}"] = (f"p{i}.jpg", f)
+            f = f"attach://p{i}"
+        media.append({"type": "photo", "media": f})
     if not long_cap:
         media[0].update(caption=caption, parse_mode="HTML")
-    ids = [m["message_id"] for m in tg("sendMediaGroup", dict(base, media=json.dumps(media)))]
+    ids = [m["message_id"] for m in tg("sendMediaGroup", dict(base, media=json.dumps(media)), files or None)]
     if long_cap:
         ids.append(tg("sendMessage", text_msg)["message_id"])
     return ids
@@ -261,11 +287,18 @@ def handle_post(post, cfg):
         notify("⚠️ Gemini lỗi, chưa xử lý được tin này. Bạn forward lại sau ít phút nhé.", post["msg_id"])
         return "ai_error"
     caption = build_post(res, cfg)
+    photos = post["photos"]
+    if not photos and post_type(res) == "news":          # news chỉ có chữ -> tự tìm ảnh
+        nc = cfg.get("news_cfg") or {}
+        try:
+            photos = find_images(res, nc, int(nc.get("auto_images", 2)))
+        except Exception as e:
+            log(f"Không tìm được ảnh ({e})")
     if res.get("confident") is True:
-        send_post(TARGET_CHAT, caption, post["photos"])
+        send_post(TARGET_CHAT, caption, photos)
         return "posted"
     # chưa chắc -> nháp + nút Y/N
-    ids = send_post(ASSISTANT, caption, post["photos"])
+    ids = send_post(ASSISTANT, caption, photos)
     first, n = ids[0], len(ids)
     doubt = html.escape(str(res.get("doubt") or "Gemini chưa chắc chắn"), quote=False)
     notify(f"🤔 <b>Cần duyệt:</b> {doubt}\nĐăng bài trên lên channel chính?", first,
