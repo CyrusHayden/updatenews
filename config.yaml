@@ -44,7 +44,7 @@ first_run_posts: 3               # lần chạy đầu (hoặc channel mới th�
 max_posts_per_run: 30            # an toàn: tối đa số bài đăng mỗi lượt
 seconds_between_posts: 3
 
-# 9) BOT SIGNAL / NHẬN ĐỊNH / NEWS forward tay (tin news dùng header/footer/default_image/auto_images ở trên) (file signal_bot.py, chạy bằng workflow "Signal Bot")
+# 9) BOT SIGNAL / NHẬN ĐỊNH / NEWS forward tay (tin news dùng header/footer/default_image/auto_images ở trên) (file signal_bot.py, chạy chung workflow "News Bot", mỗi 15 phút)
 #    Secrets cần thêm: AUTO_POST_ASSISTANT_ID (kênh/nhóm trung chuyển), INBOX_LINK (vd https://t.me/tenban)
 #    {name} = username trong INBOX_LINK, tự in đậm + gắn link. Cả dòng tự in nghiêng.
 signal:

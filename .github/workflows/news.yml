@@ -1,7 +1,7 @@
 name: News Bot
 
 on:
-  workflow_dispatch:            # chạy mỗi 15 phút do cron-job.org gọi API, hoặc bấm "Run workflow" để chạy tay
+  workflow_dispatch:            # chạy mỗi 15 phút do cron-job.org gọi API (chạy cả bot signal + bot tin tức), hoặc bấm "Run workflow" để chạy tay
 
 permissions:
   contents: write               # để lưu state.enc (nhớ đã lấy tới tin nào)
@@ -21,7 +21,17 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+      - name: Run signal bot (tin forward vào Auto Post Assistant)
+        continue-on-error: true       # bot signal lỗi cũng không làm hỏng bot tin tức
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TARGET_CHAT: ${{ secrets.TARGET_CHAT }}
+          AUTO_POST_ASSISTANT_ID: ${{ secrets.AUTO_POST_ASSISTANT_ID }}
+          INBOX_LINK: ${{ secrets.INBOX_LINK }}
+        run: python signal_bot.py
       - name: Run bot
+        if: always()
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

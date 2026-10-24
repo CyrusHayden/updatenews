@@ -4,7 +4,7 @@ Bạn forward (hoặc gửi) tin vào kênh/nhóm "Auto Post Assistant" -> bot n
 viết lại theo mẫu rồi:
   - Gemini chắc chắn  -> đăng thẳng lên channel chính (TARGET_CHAT)
   - Gemini chưa chắc  -> gửi bản nháp vào Auto Post Assistant kèm nút ✅ Y / ❌ N
-Chạy 1 lượt rồi thoát (cron-job.org gọi GitHub Actions mỗi 1-2 phút). Không cần file state:
+Chạy 1 lượt rồi thoát (chạy chung workflow News Bot, cron-job.org gọi mỗi 15 phút). Không cần file state:
 Telegram tự giữ tin chưa đọc, bản nháp nằm luôn trong Auto Post Assistant.
 """
 import base64
