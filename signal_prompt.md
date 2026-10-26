@@ -49,7 +49,7 @@ Decide what kind of post it is and rewrite it for our channel.
 - true only if you are sure about the type, and (for signal/analysis) the ticker(s) and the direction/bias.
 - false if: the image is unclear, the text and chart disagree, the asset is ambiguous, it is an ad / giveaway /
   meme / channel promotion, or anything else makes you unsure.
-- doubt: if confident is false, one short reason IN VIETNAMESE (e.g. "Không rõ coin trên chart"); else "".
+- doubt: if confident is false, one short reason IN ENGLISH (e.g. "Coin on the chart is unclear"); else "".
 
 ## Output
 Return ONLY one JSON object:

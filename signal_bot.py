@@ -86,6 +86,9 @@ def download_file(file_id):
 
 # ---------------------------------------------------------------- gom tin
 OWN_MARKERS = ("Looking for better entries with clear TP & SL levels?", "now to get more free VIP signals access!",
+               "Needs review:", "Posted to the main channel", "Cancelled, not posted", "⚠️ Gemini error", "⚠️ Error while processing",
+               "⚠️ Could not process",
+               # old Vietnamese texts (still recognised as the bot's own messages)
                "Cần duyệt:", "Đã đăng lên channel chính", "Đã hủy, không đăng", "⚠️ Gemini lỗi", "⚠️ Lỗi khi xử lý",
                "⚠️ Không xử lý được")
 
@@ -328,7 +331,7 @@ def handle_post(post, cfg):
             log(f"Không tải được ảnh ({e})")
     res = analyze(post, images, cfg)
     if not res:
-        notify("⚠️ Gemini lỗi, chưa xử lý được tin này. Bạn forward lại sau ít phút nhé.", post["msg_id"])
+        notify("⚠️ Gemini error, this post was not processed. Please forward it again in a few minutes.", post["msg_id"])
         return "ai_error"
     caption = build_post(res, cfg)
     photos = post["photos"]
@@ -344,8 +347,8 @@ def handle_post(post, cfg):
     # chưa chắc -> nháp + nút Y/N
     ids = send_post(ASSISTANT, caption, photos)
     first, n = ids[0], len(ids)
-    doubt = html.escape(str(res.get("doubt") or "Gemini chưa chắc chắn"), quote=False)
-    notify(f"🤔 <b>Cần duyệt:</b> {doubt}\nĐăng bài trên lên channel chính?", first,
+    doubt = html.escape(str(res.get("doubt") or "Gemini is not sure"), quote=False)
+    notify(f"🤔 <b>Needs review:</b> {doubt}\nPost the message above to the main channel?", first,
            [{"text": "✅ Y", "callback_data": f"y:{first}:{n}"},
             {"text": "❌ N", "callback_data": f"n:{first}:{n}"}])
     return "draft"
@@ -366,9 +369,9 @@ def handle_callback(cb):
     if action == "y":
         tg("copyMessages", {"chat_id": TARGET_CHAT, "from_chat_id": ASSISTANT,
                             "message_ids": json.dumps(list(range(first, first + n)))})
-        new_text = "✅ Đã đăng lên channel chính."
+        new_text = "✅ Posted to the main channel."
     else:
-        new_text = "❌ Đã hủy, không đăng."
+        new_text = "❌ Cancelled, not posted."
     tg("editMessageText", {"chat_id": ASSISTANT, "message_id": msg["message_id"], "text": new_text})
     log(f"Nút {action.upper()} đã xử lý")
 
@@ -384,7 +387,7 @@ def main():
         except Exception as e:
             log(f"Nút lỗi: {e}")
             try:
-                notify(f"⚠️ Không xử lý được nút bấm: {html.escape(str(e)[:200])}")
+                notify(f"⚠️ Could not process the button: {html.escape(str(e)[:200])}")
             except Exception:
                 pass
     stats = {}
@@ -395,7 +398,7 @@ def main():
             r = "error"
             log(f"Bài lỗi: {e}")
             try:
-                notify(f"⚠️ Lỗi khi xử lý tin này: {html.escape(str(e)[:200])}\nBạn forward lại nhé.", p["msg_id"])
+                notify(f"⚠️ Error while processing this post: {html.escape(str(e)[:200])}\nPlease forward it again.", p["msg_id"])
             except Exception:
                 pass
         stats[r] = stats.get(r, 0) + 1
