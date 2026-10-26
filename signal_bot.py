@@ -121,12 +121,17 @@ def group_posts(updates):
         gid = m.get("media_group_id")
         if gid and gid in by_album:
             p = by_album[gid]
+            p["ids"].append(m["message_id"])
             if photo:
                 p["photos"].append(photo)
+                p["pmap"][m["message_id"]] = photo
             if text and not p["text"]:
                 p["text"] = text
+                p["text_id"] = m["message_id"]
             continue
-        p = {"msg_id": m["message_id"], "text": text, "photos": [photo] if photo else []}
+        p = {"msg_id": m["message_id"], "ids": [m["message_id"]], "text": text,
+             "text_id": m["message_id"] if text else None,
+             "photos": [photo] if photo else [], "pmap": {m["message_id"]: photo} if photo else {}}
         posts.append(p)
         if gid:
             by_album[gid] = p
@@ -274,8 +279,47 @@ def notify(text, reply_to=None, buttons=None):
     tg("sendMessage", data)
 
 
+# ---------------------------------------------------------------- kiểm tra tin còn tồn tại
+def message_exists(mid):
+    """Bot API không báo khi bạn xóa tin -> getUpdates vẫn giữ bản sao tới 24h.
+    Cách kiểm tra: copy thử tin đó (tắt thông báo) rồi xóa bản copy ngay.
+    Telegram báo 'not found' = tin đã bị xóa. Lỗi khác -> raise (không đăng, báo để forward lại)."""
+    if DRY_RUN:
+        return True
+    try:
+        res = tg("copyMessage", {"chat_id": ASSISTANT, "from_chat_id": ASSISTANT,
+                                 "message_id": mid, "disable_notification": "true"})
+    except RuntimeError as e:
+        d = str(e).lower()
+        if "not found" in d or "message_id_invalid" in d:
+            return False
+        raise
+    try:
+        tg("deleteMessage", {"chat_id": ASSISTANT, "message_id": res["message_id"]})
+    except Exception as e:
+        log(f"Không xóa được bản copy kiểm tra ({e})")
+    return True
+
+
+def prune_deleted(post):
+    """Bỏ các tin đã bị xóa khỏi bài. Trả False nếu cả bài đã bị xóa."""
+    alive = [i for i in post["ids"] if message_exists(i)]
+    if not alive:
+        return False
+    if len(alive) < len(post["ids"]):
+        post["photos"] = [post["pmap"][i] for i in alive if i in post["pmap"]]
+        if post["text_id"] not in alive:
+            post["text"] = ""
+        if not post["photos"] and not post["text"].strip():
+            return False
+    return True
+
+
 # ---------------------------------------------------------------- xử lý
 def handle_post(post, cfg):
+    if not prune_deleted(post):
+        log("Tin đã bị xóa trong Auto Post Assistant -> bỏ qua, không đăng")
+        return "deleted"
     images = []
     for f in post["photos"][:4]:
         try:
