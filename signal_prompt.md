@@ -6,6 +6,8 @@ Decide what kind of post it is and rewrite it for our channel.
 - "signal"   = a CLEAR trade setup: an explicit LONG/SHORT/BUY/SELL call WITH an entry and TP/SL levels
                (written in the text, or drawn as a long/short position box with entry, TP and SL on the chart).
 - "analysis" = chart analysis / outlook / "watch this level" / pattern talk / bias without a clear entry + TP + SL.
+- "other"    = anything that is NOT a signal, analysis or news: ads, giveaways, channel promotion, memes, greetings,
+               chit-chat, polls, unrelated topics. These are never posted. Put the reason in "doubt".
 - "news"     = a news report or event (regulation, ETF, company, macro data, hacks, listings, politics, prices
                moving because of an event...), not a chart analysis by a trader.
 

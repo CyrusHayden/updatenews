@@ -87,7 +87,7 @@ def download_file(file_id):
 # ---------------------------------------------------------------- gom tin
 OWN_MARKERS = ("Looking for better entries with clear TP & SL levels?", "now to get more free VIP signals access!",
                "Needs review:", "Posted to the main channel", "Cancelled, not posted", "⚠️ Gemini error", "⚠️ Error while processing",
-               "⚠️ Could not process",
+               "⚠️ Could not process", "Skipped, not posted",
                # old Vietnamese texts (still recognised as the bot's own messages)
                "Cần duyệt:", "Đã đăng lên channel chính", "Đã hủy, không đăng", "⚠️ Gemini lỗi", "⚠️ Lỗi khi xử lý",
                "⚠️ Không xử lý được")
@@ -333,6 +333,11 @@ def handle_post(post, cfg):
     if not res:
         notify("⚠️ Gemini error, this post was not processed. Please forward it again in a few minutes.", post["msg_id"])
         return "ai_error"
+    ptype = str(res.get("type") or "").lower()
+    if ptype == "other":                                  # quảng cáo, giveaway, chat linh tinh... -> không bao giờ lên channel
+        why = html.escape(str(res.get("doubt") or "not a signal, analysis or news post"), quote=False)
+        notify(f"⏭ Skipped, not posted to the main channel: {why}", post["msg_id"])
+        return "skipped"
     caption = build_post(res, cfg)
     photos = post["photos"]
     if not photos and post_type(res) == "news":          # news chỉ có chữ -> tự tìm ảnh
@@ -341,13 +346,15 @@ def handle_post(post, cfg):
             photos = find_images(res, nc, int(nc.get("auto_images", 2)))
         except Exception as e:
             log(f"Không tìm được ảnh ({e})")
-    if res.get("confident") is True:
+    # Chỉ tự đăng khi: Gemini chắc chắn + đúng 1 trong 3 loại + có nội dung thật. Còn lại -> nháp để duyệt Y/N.
+    body_ok = bool(clean_body(res.get("body") or ""))
+    if res.get("confident") is True and ptype in ("signal", "analysis", "news") and body_ok:
         send_post(TARGET_CHAT, caption, photos)
         return "posted"
     # chưa chắc -> nháp + nút Y/N
     ids = send_post(ASSISTANT, caption, photos)
     first, n = ids[0], len(ids)
-    doubt = html.escape(str(res.get("doubt") or "Gemini is not sure"), quote=False)
+    doubt = html.escape(str(res.get("doubt") or ("Empty or unclear post" if not body_ok else "Gemini is not sure")), quote=False)
     notify(f"🤔 <b>Needs review:</b> {doubt}\nPost the message above to the main channel?", first,
            [{"text": "✅ Y", "callback_data": f"y:{first}:{n}"},
             {"text": "❌ N", "callback_data": f"n:{first}:{n}"}])
@@ -412,6 +419,8 @@ if __name__ == "__main__":
     missing = [n for n, v in need if not v]
     if missing:
         fail("Thiếu Secret: " + ", ".join(missing) + " (Settings > Secrets and variables > Actions).")
+    if ASSISTANT == TARGET_CHAT:
+        fail("AUTO_POST_ASSISTANT_ID trùng TARGET_CHAT: thông báo của bot sẽ lọt vào channel chính. Kiểm tra lại 2 Secret.")
     try:
         main()
     except SystemExit:
