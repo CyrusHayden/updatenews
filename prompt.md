@@ -28,6 +28,11 @@ For EACH new post, decide and rewrite it following these rules.
   (e.g. ["HSBC", "Barclays", "Standard Chartered"], ["Donald Trump", "Iran"], ["Bitcoin", "BlackRock"]).
   NEVER use abstract topics like "AI", "economy", "job cuts", "market crash". If the news names only one entity,
   add a second related concrete one (its country, CEO, headquarters city, or the product).
+- Use the EXACT English Wikipedia article title, so the search cannot land on a person with the same name:
+  "Bloomberg L.P." (not "Bloomberg"), "Tesla, Inc." (not "Tesla"), "Ford Motor Company" (not "Ford"),
+  "Goldman Sachs", "Donald Trump". Never use a bare brand name that is also a person's surname.
+- image_kinds: a list the SAME length as image_queries, one of "company", "person", "country", "coin", "other"
+  for each query (e.g. ["company", "person"]). Use "company" for any company, bank, fund or institution.
 - coin: if the main subject is a cryptocurrency/token, its name (e.g. "Bitcoin", "RedCoin"), else "".
 
 ## Examples
@@ -56,5 +61,5 @@ Rewritten:
 
 ## Output format
 Return ONLY a JSON array, one object per input post, in this shape:
-[{"id": "<same id as input>", "skip": false, "duplicate": false, "summary": "<one short English sentence describing the event>", "post": "<rewritten post>", "image_queries": ["...", "..."], "coin": "..."}]
+[{"id": "<same id as input>", "skip": false, "duplicate": false, "summary": "<one short English sentence describing the event>", "post": "<rewritten post>", "image_queries": ["...", "..."], "image_kinds": ["company", "person"], "coin": "..."}]
 For skipped/duplicate posts, "post" can be "".

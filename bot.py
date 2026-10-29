@@ -193,19 +193,32 @@ def chunks(posts, max_chars):
 
 
 # ---------------------------------------------------------------- 4. ảnh
-def wiki_image(query):
-    """Ảnh đại diện của bài Wikipedia: thử đúng tên bài trước, không có thì tìm kiếm (3 kết quả đầu)."""
-    base = {"action": "query", "format": "json", "prop": "pageimages",
+PERSON_RE = re.compile(
+    r"\b(politician|businessman|businesswoman|business magnate|entrepreneur|billionaire|investor|philanthropist|"
+    r"actor|actress|singer|rapper|footballer|journalist|economist|lawyer|president|prime minister|"
+    r"executive|chief executive|founder|born \d{4})\b|\(born |\b\d{4}\s*[–-]\s*\d{4}\b", re.I)
+
+
+def wiki_image(query, kind=""):
+    """Ảnh đại diện của bài Wikipedia. Thử đúng tên bài trước, không có thì tìm kiếm (5 kết quả đầu).
+    Bỏ qua trang phân nhánh; nếu kind = company/org/place/other thì bỏ qua trang NGƯỜI
+    (vd 'Bloomberg' -> Michael Bloomberg). Không có ảnh chắc chắn đúng -> trả None (bỏ ảnh đó)."""
+    kind = (kind or "").lower()
+    base = {"action": "query", "format": "json", "prop": "pageimages|description",
             "piprop": "thumbnail", "pithumbsize": 1000, "redirects": 1}
     tries = [dict(base, titles=query),
-             dict(base, generator="search", gsrsearch=query, gsrlimit=3)]
+             dict(base, generator="search", gsrsearch=query, gsrlimit=5)]
     for params in tries:
         try:
             r = requests.get("https://en.wikipedia.org/w/api.php", headers=WIKI_UA, timeout=20, params=params)
             pages = sorted(r.json().get("query", {}).get("pages", {}).values(), key=lambda p: p.get("index", 0))
             for p in pages:
-                if p.get("thumbnail"):
-                    return p["thumbnail"]["source"]
+                desc = p.get("description") or ""
+                if not p.get("thumbnail") or "disambiguation" in desc.lower() or "referred to by the same term" in desc.lower():
+                    continue
+                if kind in ("company", "org", "organization", "place", "country", "other") and PERSON_RE.search(desc):
+                    continue
+                return p["thumbnail"]["source"]
         except Exception:
             pass
     return None
@@ -230,10 +243,11 @@ def find_images(res, cfg, want=2):
         if u:
             urls.append(u)
     queries = res.get("image_queries") or ([res["image_query"]] if res.get("image_query") else [])
-    for q in queries:
+    kinds = res.get("image_kinds") or []
+    for i, q in enumerate(queries):
         if len(urls) >= want:
             break
-        u = wiki_image(str(q))
+        u = wiki_image(str(q), str(kinds[i]) if i < len(kinds) else "")
         if u and u not in urls:
             urls.append(u)
     images = [b for b in (load_image_bytes(u) for u in urls) if b][:want]

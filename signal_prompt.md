@@ -45,6 +45,11 @@ Decide what kind of post it is and rewrite it for our channel.
 ## 4. image_queries / coin (news only; else [] and "")
 - image_queries: 2–4 concrete proper names to search on Wikipedia for a picture (companies, people, countries,
   cities, coins, institutions), most important first. Never abstract topics like "economy" or "AI".
+- Use the EXACT English Wikipedia article title, so the search cannot land on a person with the same name:
+  "Bloomberg L.P." (not "Bloomberg"), "Tesla, Inc." (not "Tesla"), "Ford Motor Company" (not "Ford"),
+  "Goldman Sachs", "Donald Trump". Never use a bare brand name that is also a person's surname.
+- image_kinds: a list the SAME length as image_queries, one of "company", "person", "country", "coin", "other"
+  for each query (e.g. ["company", "person"]). Use "company" for any company, bank, fund or institution.
 - coin: if the main subject is a cryptocurrency/token, its name (e.g. "Bitcoin"), else "".
 
 ## 5. confident
@@ -55,4 +60,4 @@ Decide what kind of post it is and rewrite it for our channel.
 
 ## Output
 Return ONLY one JSON object:
-{"type": "signal", "tickers": ["ETH"], "body": "...", "image_queries": [], "coin": "", "confident": true, "doubt": ""}
+{"type": "signal", "tickers": ["ETH"], "body": "...", "image_queries": [], "image_kinds": [], "coin": "", "confident": true, "doubt": ""}
