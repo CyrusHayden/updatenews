@@ -9,6 +9,12 @@
 #      TARGET_CHAT     = @channel_cua_ban  hoặc  -100xxxxxxxxxx
 #    Xem HUONG_DAN.md, Bước 5.
 
+# 0) CÔNG TẮC BOT TỰ LẤY TIN (bot.py)
+#    true  = chạy bình thường
+#    false = TẠM DỪNG: không lấy/không đăng tin từ channel nguồn (tin forward vào Auto Post Assistant vẫn chạy).
+#            Trong lúc dừng bot vẫn ghi nhớ tin mới nhất, nên khi bật lại sẽ KHÔNG đăng dồn tin cũ.
+news_enabled: false
+
 # 3) LỌC TỪ KHÓA (không phân biệt hoa thường)
 #    include: tin phải chứa ÍT NHẤT 1 từ này. Để trống [] = lấy hết.
 #    exclude: tin chứa BẤT KỲ từ nào ở đây sẽ bị bỏ (quảng cáo, giveaway...)

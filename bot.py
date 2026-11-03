@@ -330,6 +330,19 @@ def main():
     if not cfg["sources"] or not cfg.get("target_chat"):
         fail("Thiếu Secret SOURCE_CHANNELS hoặc TARGET_CHAT (Settings > Secrets and variables > Actions).")
     state = load_state()
+    if cfg.get("news_enabled", True) is False:
+        # tạm dừng: chỉ dời mốc tới tin mới nhất để khi bật lại không đăng dồn tin cũ
+        for n, ch in enumerate(cfg["sources"], 1):
+            ch = str(ch).strip().replace("https://t.me/", "").replace("t.me/", "").lstrip("@")
+            try:
+                top = latest_id(ch)
+                if top:
+                    state["last_ids"][ch] = top
+            except Exception as e:
+                log(f"channel #{n}: không đọc được mốc ({type(e).__name__})")
+        save_state(state)
+        log("Bot tin tức đang TẠM DỪNG (news_enabled: false trong config.yaml) - không đăng gì.")
+        return
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(hours=cfg.get("dedupe_hours", 24))
     state["recent"] = [r for r in state["recent"] if datetime.fromisoformat(r["t"]) > cutoff]
