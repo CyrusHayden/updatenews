@@ -1,7 +1,7 @@
 name: News Bot
 
 on:
-  workflow_dispatch:            # chạy mỗi 15 phút do cron-job.org gọi API (chạy cả bot signal + bot tin tức), hoặc bấm "Run workflow" để chạy tay
+  workflow_dispatch:            # chạy mỗi 5 phút do cron-job.org gọi API (chạy cả bot signal + bot tin tức), hoặc bấm "Run workflow" để chạy tay
 
 permissions:
   contents: write               # để lưu state.enc (nhớ đã lấy tới tin nào)
@@ -44,6 +44,5 @@ jobs:
         run: |
           git config user.name "news-bot"
           git config user.email "news-bot@users.noreply.github.com"
-          [ -f state.enc ] || exit 0
-          git add state.enc
+          for f in state.enc signal_mode.txt; do if [ -f "$f" ]; then git add "$f"; fi; done
           git diff --cached --quiet || (git commit -m "update [skip ci]" && git pull --rebase && git push)

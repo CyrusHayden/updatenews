@@ -2,9 +2,11 @@
 Bot đăng lại SIGNAL / NHẬN ĐỊNH / NEWS.
 Bạn forward (hoặc gửi) tin vào kênh/nhóm "Auto Post Assistant" -> bot nhờ Gemini đọc chữ + ảnh,
 viết lại theo mẫu rồi:
-  - Gemini chắc chắn  -> đăng thẳng lên channel chính (TARGET_CHAT)
-  - Gemini chưa chắc  -> gửi bản nháp vào Auto Post Assistant kèm nút ✅ Y / ❌ N
-Chạy 1 lượt rồi thoát (chạy chung workflow News Bot, cron-job.org gọi mỗi 15 phút). Không cần file state:
+  - Chế độ 🤖 AUTO:   Gemini chắc chắn -> đăng thẳng lên channel chính (TARGET_CHAT);
+                      chưa chắc -> gửi bản nháp vào Auto Post Assistant kèm nút ✅ Y / ❌ N
+  - Chế độ 👀 REVIEW: MỌI bài đều gửi bản nháp + nút ✅ Y / ❌ N, bấm Y mới đăng.
+  Đổi chế độ: gõ /mode trong Auto Post Assistant -> bot gửi bảng 2 nút (lượt chạy sau). Chế độ lưu ở signal_mode.txt.
+Chạy 1 lượt rồi thoát (chạy chung workflow News Bot, cron-job.org gọi mỗi 5 phút).
 Telegram tự giữ tin chưa đọc, bản nháp nằm luôn trong Auto Post Assistant.
 """
 import base64
@@ -29,6 +31,9 @@ TARGET_CHAT = os.environ.get("TARGET_CHAT", "").strip()                  # chann
 ASSISTANT = os.environ.get("AUTO_POST_ASSISTANT_ID", "").strip()          # kênh/nhóm trung chuyển
 INBOX_LINK = os.environ.get("INBOX_LINK", "").strip()                     # vd https://t.me/tenban
 DRY_RUN = os.environ.get("DRY_RUN") == "1"
+
+MODE_FILE = ROOT / "signal_mode.txt"                                    # "auto" hoặc "review"
+MODE_CMDS = {"/mode", "mode"}
 
 SECRETS = [s for s in (TARGET_CHAT, ASSISTANT, INBOX_LINK, BOT_TOKEN) if s]
 
@@ -282,6 +287,47 @@ def notify(text, reply_to=None, buttons=None):
     tg("sendMessage", data)
 
 
+# ---------------------------------------------------------------- chế độ Auto / Review
+def get_mode():
+    try:
+        m = MODE_FILE.read_text(encoding="utf-8").strip().lower()
+    except FileNotFoundError:
+        return "auto"
+    return "review" if m == "review" else "auto"
+
+
+def set_mode(mode):
+    MODE_FILE.write_text(mode + "\n", encoding="utf-8")
+
+
+def mode_panel(mode):
+    now = "🤖 <b>AUTO</b> (sure posts go straight to the channel)" if mode == "auto" \
+        else "👀 <b>REVIEW</b> (every post is sent here first, tap ✅ Y to publish)"
+    text = (f"⚙️ <b>Posting mode:</b> {now}\n\nTap a button to change. "
+            "The change applies on the bot's next run (a few minutes).")
+    buttons = [{"text": ("✅ " if mode == "auto" else "") + "🤖 Auto", "callback_data": "m:auto"},
+               {"text": ("✅ " if mode == "review" else "") + "👀 Review", "callback_data": "m:review"}]
+    return text, buttons
+
+
+def send_mode_panel():
+    text, buttons = mode_panel(get_mode())
+    if DRY_RUN:
+        print(f"[ASSISTANT] {text} {buttons}")
+        return
+    r = tg("sendMessage", {"chat_id": ASSISTANT, "text": text, "parse_mode": "HTML",
+                           "reply_markup": json.dumps({"inline_keyboard": [buttons]})})
+    try:
+        tg("pinChatMessage", {"chat_id": ASSISTANT, "message_id": r["message_id"], "disable_notification": True})
+    except Exception as e:
+        log(f"Không ghim được bảng chế độ (bot thiếu quyền ghim?) - vẫn dùng được bình thường ({e})")
+
+
+def is_mode_cmd(post):
+    t = (post["text"] or "").strip().lower().split("@")[0]
+    return not post["photos"] and t in MODE_CMDS
+
+
 # ---------------------------------------------------------------- kiểm tra tin còn tồn tại
 def message_exists(mid):
     """Bot API không báo khi bạn xóa tin -> getUpdates vẫn giữ bản sao tới 24h.
@@ -348,14 +394,19 @@ def handle_post(post, cfg):
             log(f"Không tìm được ảnh ({e})")
     # Chỉ tự đăng khi: Gemini chắc chắn + đúng 1 trong 3 loại + có nội dung thật. Còn lại -> nháp để duyệt Y/N.
     body_ok = bool(clean_body(res.get("body") or ""))
-    if res.get("confident") is True and ptype in ("signal", "analysis", "news") and body_ok:
+    review = get_mode() == "review"
+    if not review and res.get("confident") is True and ptype in ("signal", "analysis", "news") and body_ok:
         send_post(TARGET_CHAT, caption, photos)
         return "posted"
     # chưa chắc -> nháp + nút Y/N
     ids = send_post(ASSISTANT, caption, photos)
     first, n = ids[0], len(ids)
     doubt = html.escape(str(res.get("doubt") or ("Empty or unclear post" if not body_ok else "Gemini is not sure")), quote=False)
-    notify(f"🤔 <b>Needs review:</b> {doubt}\nPost the message above to the main channel?", first,
+    if review:
+        head = "👀 <b>Review mode</b>" + (f" · ⚠️ {doubt}" if res.get("doubt") or not body_ok else "")
+    else:
+        head = f"🤔 <b>Needs review:</b> {doubt}"
+    notify(f"{head}\nPost the message above to the main channel?", first,
            [{"text": "✅ Y", "callback_data": f"y:{first}:{n}"},
             {"text": "❌ N", "callback_data": f"n:{first}:{n}"}])
     return "draft"
@@ -364,6 +415,22 @@ def handle_post(post, cfg):
 def handle_callback(cb):
     msg = cb.get("message") or {}
     if str((msg.get("chat") or {}).get("id")) != ASSISTANT:
+        return
+    mm = re.fullmatch(r"m:(auto|review)", cb.get("data") or "")
+    if mm:
+        set_mode(mm.group(1))
+        try:
+            tg("answerCallbackQuery", {"callback_query_id": cb["id"], "text": f"Mode: {mm.group(1).upper()}"})
+        except Exception:
+            pass
+        text, buttons = mode_panel(mm.group(1))
+        try:
+            tg("editMessageText", {"chat_id": ASSISTANT, "message_id": msg["message_id"], "text": text,
+                                   "parse_mode": "HTML", "reply_markup": json.dumps({"inline_keyboard": [buttons]})})
+        except Exception as e:
+            if "not modified" not in str(e):
+                raise
+        log(f"Đổi chế độ -> {mm.group(1).upper()}")
         return
     m = re.fullmatch(r"([yn]):(\d+):(\d+)", cb.get("data") or "")
     if not m:
@@ -387,6 +454,11 @@ def main():
     cfg = load_config()
     updates = get_updates()
     posts, callbacks = group_posts(updates)
+    cmds = [p for p in posts if is_mode_cmd(p)]
+    posts = [p for p in posts if not is_mode_cmd(p)]
+    first_time = not MODE_FILE.exists()
+    if first_time:
+        set_mode("auto")
     log(f"{len(updates)} update: {len(posts)} bài mới, {len(callbacks)} lần bấm nút")
     for cb in callbacks:
         try:
@@ -397,6 +469,17 @@ def main():
                 notify(f"⚠️ Could not process the button: {html.escape(str(e)[:200])}")
             except Exception:
                 pass
+    if cmds or first_time:
+        try:
+            send_mode_panel()
+            for c in cmds:     # xóa lệnh /mode cho gọn (thiếu quyền xóa thì thôi)
+                try:
+                    tg("deleteMessage", {"chat_id": ASSISTANT, "message_id": c["msg_id"]})
+                except Exception:
+                    pass
+        except Exception as e:
+            log(f"Không gửi được bảng chế độ: {e}")
+    log(f"Chế độ hiện tại: {get_mode().upper()}")
     stats = {}
     for p in posts:
         try:
