@@ -385,7 +385,11 @@ def main():
     posted = 0
     for p in sorted(cand, key=lambda x: x["time"]):
         res = results.get(f"{p['channel']}/{p['id']}")
-        if not res or res.get("skip") or res.get("duplicate") or not res.get("post"):
+        if res and res.get("skip"):
+            why = "không liên quan" if res.get("skip_reason") == "off-topic" else "quảng cáo/không có tin"
+            log(f"Bỏ ({why}): {(res.get('summary') or '')[:150]}")
+            continue
+        if not res or res.get("duplicate") or not res.get("post"):
             continue
         if posted >= cfg.get("max_posts_per_run", 30):
             break

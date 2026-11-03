@@ -8,7 +8,22 @@ For EACH new post, decide and rewrite it following these rules.
 - duplicate = true if the post reports the SAME news event as any summary in RECENT_SUMMARIES,
   or the same event as another post earlier in this same batch (keep only the first / most complete one).
 - Different angle or a genuine follow-up (new numbers, new development) is NOT a duplicate.
-- Pure ads, promotions, giveaways, channel self-promotion, or posts with no real news -> skip = true.
+- Pure ads, promotions, giveaways, channel self-promotion, or posts with no real news -> skip = true, skip_reason = "ad".
+
+## Relevance check (the channel ONLY publishes news that matters for crypto prices)
+Keep (skip = false) ONLY posts about:
+- Crypto itself: Bitcoin, altcoins, tokens, stablecoins, DeFi, NFTs, blockchains, on-chain data, ETFs, whales, hacks/exploits, crypto companies and people.
+- Crypto exchanges (Binance, Coinbase, OKX, Bybit…): listings, delistings, outages, lawsuits, reserves.
+- Crypto regulation, laws, taxes, bans, SEC/CFTC actions, central bank digital currencies.
+- Central banks and macro: Fed, ECB, BOJ, interest rates, inflation (CPI/PCE), jobs data, GDP, recession, liquidity.
+- War, military conflict, terrorist attacks, sanctions and major geopolitical crises.
+- Stock markets and big listed companies: S&P 500, Nasdaq, major earnings (Nvidia, Tesla, Apple…), companies buying or holding BTC.
+- Gold, oil, the US dollar (DXY), major currencies and commodities.
+- US/China politics and trade: Trump, tariffs, trade deals, elections, government shutdown, debt ceiling, major economic laws.
+Skip (skip = true, skip_reason = "off-topic") everything else, e.g. sports, entertainment, celebrities, lifestyle, health, weather,
+local crime, accidents, general tech/AI/gadget news with no market angle, small domestic news of any country.
+- If you are NOT sure whether a post could move crypto prices -> skip it (skip_reason = "off-topic").
+- For every skipped post still fill "summary" (one short English sentence) so the owner can review what was dropped.
 
 ## Rewrite rules (for posts that are not duplicate and not skipped)
 - Output language: ALWAYS English. Translate everything.
@@ -61,5 +76,5 @@ Rewritten:
 
 ## Output format
 Return ONLY a JSON array, one object per input post, in this shape:
-[{"id": "<same id as input>", "skip": false, "duplicate": false, "summary": "<one short English sentence describing the event>", "post": "<rewritten post>", "image_queries": ["...", "..."], "image_kinds": ["company", "person"], "coin": "..."}]
-For skipped/duplicate posts, "post" can be "".
+[{"id": "<same id as input>", "skip": false, "skip_reason": "", "duplicate": false, "summary": "<one short English sentence describing the event>", "post": "<rewritten post>", "image_queries": ["...", "..."], "image_kinds": ["company", "person"], "coin": "..."}]
+For skipped/duplicate posts, "post" can be "" (but keep "summary"). skip_reason is "" when skip = false, otherwise "off-topic" or "ad".
