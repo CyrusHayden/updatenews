@@ -460,6 +460,11 @@ def main():
     if first_time:
         set_mode("auto")
     log(f"{len(updates)} update: {len(posts)} bài mới, {len(callbacks)} lần bấm nút")
+    for u in updates:           # chẩn đoán: loại update + chat (không in nội dung)
+        k = next((x for x in u if x != "update_id"), "?")
+        m = u.get(k) or {}
+        c = (m.get("message") or m).get("chat") or {}
+        log(f"  update {k} | chat {c.get('type')} {'= Assistant' if str(c.get('id')) == ASSISTANT else 'khác'}")
     for cb in callbacks:
         try:
             handle_callback(cb)
