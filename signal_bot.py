@@ -5,7 +5,8 @@ viết lại theo mẫu rồi:
   - Chế độ 🤖 AUTO:   Gemini chắc chắn -> đăng thẳng lên channel chính (TARGET_CHAT);
                       chưa chắc -> gửi bản nháp vào Auto Post Assistant kèm nút ✅ Y / ❌ N
   - Chế độ 👀 REVIEW: MỌI bài đều gửi bản nháp + nút ✅ Y / ❌ N, bấm Y mới đăng.
-  Đổi chế độ: gõ /mode trong Auto Post Assistant -> bot gửi bảng 2 nút (lượt chạy sau). Chế độ lưu ở signal_mode.txt.
+  Đổi chế độ (có hiệu lực ở lượt chạy sau): bấm nút trên bảng ⚙️ Posting mode, hoặc gõ /review, /auto.
+  Gõ /mode -> bot gửi bảng 2 nút mới. Chế độ (dòng 1) + ID bảng đang dùng (dòng 2) lưu ở signal_mode.txt.
 Chạy 1 lượt rồi thoát (chạy chung workflow News Bot, cron-job.org gọi mỗi 5 phút).
 Telegram tự giữ tin chưa đọc, bản nháp nằm luôn trong Auto Post Assistant.
 """
@@ -33,7 +34,7 @@ INBOX_LINK = os.environ.get("INBOX_LINK", "").strip()                     # vd h
 DRY_RUN = os.environ.get("DRY_RUN") == "1"
 
 MODE_FILE = ROOT / "signal_mode.txt"                                    # "auto" hoặc "review"
-MODE_CMDS = {"/mode", "mode"}
+MODE_CMDS = {"/mode", "mode", "/auto", "/review"}
 
 SECRETS = [s for s in (TARGET_CHAT, ASSISTANT, INBOX_LINK, BOT_TOKEN) if s]
 
@@ -92,7 +93,7 @@ def download_file(file_id):
 # ---------------------------------------------------------------- gom tin
 OWN_MARKERS = ("Looking for better entries with clear TP & SL levels?", "now to get more free VIP signals access!",
                "Needs review:", "Posted to the main channel", "Cancelled, not posted", "⚠️ Gemini error", "⚠️ Error while processing",
-               "⚠️ Could not process", "Skipped, not posted",
+               "⚠️ Could not process", "Skipped, not posted", "Posting mode",
                # old Vietnamese texts (still recognised as the bot's own messages)
                "Cần duyệt:", "Đã đăng lên channel chính", "Đã hủy, không đăng", "⚠️ Gemini lỗi", "⚠️ Lỗi khi xử lý",
                "⚠️ Không xử lý được")
@@ -288,23 +289,50 @@ def notify(text, reply_to=None, buttons=None):
 
 
 # ---------------------------------------------------------------- chế độ Auto / Review
-def get_mode():
+def _read_mode_file():
     try:
-        m = MODE_FILE.read_text(encoding="utf-8").strip().lower()
+        lines = MODE_FILE.read_text(encoding="utf-8").split()
     except FileNotFoundError:
-        return "auto"
-    return "review" if m == "review" else "auto"
+        return "auto", None
+    mode = "review" if lines and lines[0].lower() == "review" else "auto"
+    panel = int(lines[1]) if len(lines) > 1 and lines[1].isdigit() else None
+    return mode, panel
 
 
-def set_mode(mode):
-    MODE_FILE.write_text(mode + "\n", encoding="utf-8")
+def get_mode():
+    return _read_mode_file()[0]
+
+
+def get_panel_id():
+    return _read_mode_file()[1]
+
+
+def set_mode(mode, panel_id=None):
+    """Lưu chế độ; panel_id = ID tin bảng Posting mode (giữ ID cũ nếu không truyền)."""
+    panel_id = panel_id or get_panel_id()
+    MODE_FILE.write_text(mode + "\n" + (f"{panel_id}\n" if panel_id else ""), encoding="utf-8")
+
+
+def refresh_panel(mode):
+    """Sửa bảng Posting mode đang dùng cho đúng dấu ✅ (bảng bị xóa/không biết ID thì thôi)."""
+    pid = get_panel_id()
+    if not pid or DRY_RUN:
+        return
+    text, buttons = mode_panel(mode)
+    try:
+        tg("editMessageText", {"chat_id": ASSISTANT, "message_id": pid, "text": text, "parse_mode": "HTML",
+                               "reply_markup": json.dumps({"inline_keyboard": [buttons]})})
+    except Exception as e:
+        if "not modified" not in str(e):
+            log(f"Không sửa được bảng chế độ cũ ({e})")
 
 
 def mode_panel(mode):
     now = "🤖 <b>AUTO</b> (sure posts go straight to the channel)" if mode == "auto" \
         else "👀 <b>REVIEW</b> (every post is sent here first, tap ✅ Y to publish)"
-    text = (f"⚙️ <b>Posting mode:</b> {now}\n\nTap a button to change. "
-            "The change applies on the bot's next run (a few minutes).")
+    text = (f"⚙️ <b>Posting mode:</b> {now}\n\nTap a button or type /review or /auto to change. "
+            "The change applies on the bot's next run (up to a few minutes), "
+            "the button may keep loading until then.")
     buttons = [{"text": ("✅ " if mode == "auto" else "") + "🤖 Auto", "callback_data": "m:auto"},
                {"text": ("✅ " if mode == "review" else "") + "👀 Review", "callback_data": "m:review"}]
     return text, buttons
@@ -317,6 +345,13 @@ def send_mode_panel():
         return
     r = tg("sendMessage", {"chat_id": ASSISTANT, "text": text, "parse_mode": "HTML",
                            "reply_markup": json.dumps({"inline_keyboard": [buttons]})})
+    old = get_panel_id()
+    set_mode(get_mode(), r["message_id"])
+    if old:
+        try:
+            tg("deleteMessage", {"chat_id": ASSISTANT, "message_id": old})   # xóa bảng cũ cho gọn
+        except Exception:
+            pass
     try:
         tg("pinChatMessage", {"chat_id": ASSISTANT, "message_id": r["message_id"], "disable_notification": True})
     except Exception as e:
@@ -418,7 +453,7 @@ def handle_callback(cb):
         return
     mm = re.fullmatch(r"m:(auto|review)", cb.get("data") or "")
     if mm:
-        set_mode(mm.group(1))
+        set_mode(mm.group(1), msg.get("message_id"))
         try:
             tg("answerCallbackQuery", {"callback_query_id": cb["id"], "text": f"Mode: {mm.group(1).upper()}"})
         except Exception:
@@ -474,16 +509,29 @@ def main():
                 notify(f"⚠️ Could not process the button: {html.escape(str(e)[:200])}")
             except Exception:
                 pass
-    if cmds or first_time:
+    want_panel = first_time
+    for c in cmds:             # /review, /auto: đổi chế độ; /mode: gửi bảng mới
+        t = c["text"].strip().lower().split("@")[0].lstrip("/")
+        if t in ("auto", "review"):
+            set_mode(t)
+            log(f"Đổi chế độ (lệnh /{t}) -> {t.upper()}")
+            try:
+                refresh_panel(t)
+                notify(f"✅ Posting mode is now <b>{t.upper()}</b>.", c["msg_id"])
+            except Exception as e:
+                log(f"Không báo được đổi chế độ: {e}")
+        else:
+            want_panel = True
+    if want_panel:
         try:
             send_mode_panel()
-            for c in cmds:     # xóa lệnh /mode cho gọn (thiếu quyền xóa thì thôi)
-                try:
-                    tg("deleteMessage", {"chat_id": ASSISTANT, "message_id": c["msg_id"]})
-                except Exception:
-                    pass
         except Exception as e:
             log(f"Không gửi được bảng chế độ: {e}")
+    for c in cmds:             # xóa lệnh đã gõ cho gọn (thiếu quyền xóa thì thôi)
+        try:
+            tg("deleteMessage", {"chat_id": ASSISTANT, "message_id": c["msg_id"]})
+        except Exception:
+            pass
     log(f"Chế độ hiện tại: {get_mode().upper()}")
     stats = {}
     for p in posts:
