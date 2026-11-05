@@ -30,8 +30,18 @@ jobs:
           AUTO_POST_ASSISTANT_ID: ${{ secrets.AUTO_POST_ASSISTANT_ID }}
           INBOX_LINK: ${{ secrets.INBOX_LINK }}
         run: python signal_bot.py
-      - name: Run bot
+      - name: Kiểm tra công tắc bot tin tức (news_enabled trong config.yaml)
+        id: news
         if: always()
+        run: |
+          if grep -Eq '^news_enabled:[[:space:]]*false' config.yaml; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Bot tin tức đang TẠM DỪNG (news_enabled: false) - bỏ qua bước Run bot."
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run bot
+        if: always() && steps.news.outputs.enabled == 'true'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -45,4 +55,11 @@ jobs:
           git config user.name "news-bot"
           git config user.email "news-bot@users.noreply.github.com"
           for f in state.enc signal_mode.txt; do if [ -f "$f" ]; then git add "$f"; fi; done
-          git diff --cached --quiet || (git commit -m "update [skip ci]" && git pull --rebase && git push)
+          git diff --cached --quiet && exit 0
+          git commit -m "update [skip ci]"
+          # GitHub thỉnh thoảng trục trặc khi push -> thử lại 3 lần; vẫn lỗi thì chỉ cảnh báo, không báo run fail
+          for i in 1 2 3; do
+            if git pull --rebase && git push; then exit 0; fi
+            echo "Push lỗi lần $i, thử lại sau 10 giây..."; sleep 10
+          done
+          echo "::warning::Không lưu được trạng thái lên GitHub (GitHub trục trặc). Lượt sau sẽ lưu lại."

@@ -369,6 +369,22 @@ def main():
         except Exception as e:
             print(f"::warning::{tag}: không đọc được ({type(e).__name__}) - kiểm tra tên channel / t.me/s có xem được không", flush=True)
 
+    # 1b. bỏ tin quá cũ (vd lúc vừa bật lại sau thời gian tạm dừng -> không đăng dồn tin cũ)
+    max_age = float(cfg.get("max_post_age_hours", 2))
+    if max_age > 0:
+        old_cut = now - timedelta(hours=max_age)
+        kept = []
+        for p in new_posts:
+            try:
+                ok = not p["time"] or datetime.fromisoformat(p["time"].replace("Z", "+00:00")) >= old_cut
+            except ValueError:
+                ok = True
+            if ok:
+                kept.append(p)
+        if len(kept) < len(new_posts):
+            log(f"Bỏ {len(new_posts) - len(kept)} tin cũ hơn {max_age:g} giờ")
+        new_posts = kept
+
     # 2. lọc từ khóa + trùng y hệt
     cand = []
     for p in new_posts:

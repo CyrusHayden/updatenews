@@ -14,6 +14,9 @@
 #    false = TẠM DỪNG: không lấy/không đăng tin từ channel nguồn (tin forward vào Auto Post Assistant vẫn chạy).
 #            Trong lúc dừng bot vẫn ghi nhớ tin mới nhất, nên khi bật lại sẽ KHÔNG đăng dồn tin cũ.
 news_enabled: false
+#    Khi false, GitHub Actions BỎ QUA hẳn bước bot tin tức (không chạy bot.py).
+#    Khi bật lại, bot tự bỏ các tin cũ hơn max_post_age_hours giờ -> không đăng dồn tin cũ.
+max_post_age_hours: 2
 
 # 3) LỌC TỪ KHÓA (không phân biệt hoa thường)
 #    include: tin phải chứa ÍT NHẤT 1 từ này. Để trống [] = lấy hết.
