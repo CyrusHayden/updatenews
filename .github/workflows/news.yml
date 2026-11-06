@@ -21,6 +21,13 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+      - name: Đăng hàng chờ outbox (bài Claude đẩy lên sau khi bạn duyệt)
+        continue-on-error: true       # lỗi cũng không làm hỏng các bot khác
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TARGET_CHAT: ${{ secrets.TARGET_CHAT }}
+          AUTO_POST_ASSISTANT_ID: ${{ secrets.AUTO_POST_ASSISTANT_ID }}
+        run: python outbox_post.py
       - name: Run signal bot (tin forward vào Auto Post Assistant)
         continue-on-error: true       # bot signal lỗi cũng không làm hỏng bot tin tức
         env:
@@ -55,6 +62,7 @@ jobs:
           git config user.name "news-bot"
           git config user.email "news-bot@users.noreply.github.com"
           for f in state.enc signal_mode.txt; do if [ -f "$f" ]; then git add "$f"; fi; done
+          git add -A outbox              # ghi nhận bài outbox đã đăng (file bị xóa) để không đăng trùng
           git diff --cached --quiet && exit 0
           git commit -m "update [skip ci]"
           # GitHub thỉnh thoảng trục trặc khi push -> thử lại 3 lần; vẫn lỗi thì chỉ cảnh báo, không báo run fail
